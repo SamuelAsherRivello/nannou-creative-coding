@@ -1,0 +1,61 @@
+name: ExportGithubPages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version or tag to export, for example v0.1.0.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  export:
+    name: Export GitHub Pages
+    runs-on: windows-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = '${{ github.event.release.tag_name }}'
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = '${{ inputs.version }}'
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = (Get-Content -LiteralPath VERSION.txt -Raw).Trim()
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Export static Pages site
+        shell: pwsh
+        run: ./scripts/ExportGithubPages.ps1 -Version '${{ steps.version.outputs.version }}' -RepositoryOwner '${{ github.repository_owner }}' -RepositoryName '${{ github.event.repository.name }}'
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/github-pages/public
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

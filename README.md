@@ -77,3 +77,43 @@ The server is built with the official Rust MCP SDK (`rmcp`) and exposes project 
 - `read_project_resource`
 
 It does not execute project commands or modify files.
+
+## GitHub Pages Release Export
+
+Live export URL:
+
+```text
+https://samuelasherrivello.github.io/nannou-creative-coding/latest/
+```
+
+Versioned exports are published under:
+
+```text
+https://samuelasherrivello.github.io/nannou-creative-coding/releases/v0.1.0/
+```
+
+Increase the project version locally:
+
+```powershell
+.\scripts\IncreaseReleaseVersion.ps1 -Part patch
+```
+
+Use `-Part minor` or `-Part major` when needed. The script updates `VERSION.txt` and Rust crate versions, then runs `cargo check`.
+
+Create a release commit and tag:
+
+```powershell
+.\scripts\IncreaseReleaseVersion.ps1 -Part patch -Commit -Tag
+git push
+git push origin v0.1.1
+```
+
+Publish a GitHub Release for that tag. The `ExportGithubPages` workflow exports a static GitHub Pages site for `/latest/` and `/releases/<tag>/`.
+
+You can test the export locally without publishing:
+
+```powershell
+.\scripts\ExportGithubPages.ps1 -Version v0.1.0
+```
+
+The local export is written to `target/github-pages/public`.
