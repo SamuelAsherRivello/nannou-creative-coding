@@ -1,0 +1,15 @@
+[package]
+name = "nannou-creative-coding"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nannou-creative-coding"
+path = "main.rs"
+
+[dependencies]
+hot-lib-reloader = "0.8"
+nannou = "0.19"
+hot_reload = { path = "../hot-reload" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
