@@ -1492,6 +1492,7 @@ dependencies = [
  "hot_reload",
  "nannou",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

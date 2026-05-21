@@ -13,3 +13,4 @@ hot_reload = { path = "../hot_reload" }
 nannou = { version = "0.19", features = ["wasm-experimental"] }
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = ["Window"] }

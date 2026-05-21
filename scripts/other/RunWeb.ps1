@@ -206,9 +206,21 @@ $IndexHtml = @"
       };
 
       const syncCanvasDisplaySize = (canvas) => {
-        const pixelRatio = window.devicePixelRatio || 1;
-        canvas.style.width = (canvas.width / pixelRatio) + "px";
-        canvas.style.height = (canvas.height / pixelRatio) + "px";
+        const aspect = 16 / 10;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const viewportAspect = viewportWidth / viewportHeight;
+        const fittedWidth = viewportAspect > aspect ? viewportHeight * aspect : viewportWidth;
+        const maxDisplayWidth = canvas.width;
+        const maxDisplayHeight = canvas.height;
+        const displayWidth = Math.max(
+          1,
+          Math.floor(Math.min(fittedWidth, maxDisplayWidth, maxDisplayHeight * aspect))
+        );
+        const displayHeight = Math.max(1, Math.floor(displayWidth / aspect));
+
+        canvas.style.width = displayWidth + "px";
+        canvas.style.height = displayHeight + "px";
       };
 
       const toggleFullscreen = async () => {
@@ -232,6 +244,7 @@ $IndexHtml = @"
       });
       window.addEventListener("load", focusCanvas);
       window.addEventListener("resize", focusCanvas);
+      window.addEventListener("fullscreenchange", focusCanvas);
       window.addEventListener("pointerdown", focusCanvas);
       const handleFullscreenShortcut = (event) => {
         if (event.key.toLowerCase() !== "f") return;
