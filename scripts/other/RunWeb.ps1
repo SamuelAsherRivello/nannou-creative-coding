@@ -46,6 +46,39 @@ function Find-AvailablePort {
     throw "No available localhost TCP port was found from $StartPort through $EndPort."
 }
 
+function Set-TextFileIfChanged {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $ExistingContent = Get-Content -LiteralPath $Path -Raw
+        if ($ExistingContent -eq $Content) {
+            return
+        }
+    }
+
+    Set-Content -LiteralPath $Path -Value $Content -NoNewline
+}
+
+function Copy-FileIfChanged {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    if (Test-Path -LiteralPath $Destination -PathType Leaf) {
+        $SourceHash = Get-FileHash -LiteralPath $Source
+        $DestinationHash = Get-FileHash -LiteralPath $Destination
+        if ($SourceHash.Hash -eq $DestinationHash.Hash) {
+            return
+        }
+    }
+
+    Copy-Item -Path $Source -Destination $Destination -Force
+}
+
 $RepositoryRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $RepositoryRoot
 
@@ -59,8 +92,9 @@ if (-not (Test-Command "wasm-bindgen")) {
 
 $SitePath = Join-Path $RepositoryRoot "target\run-app-web\site"
 $PkgPath = Join-Path $SitePath "pkg"
-$CargoTargetPath = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-web-target"
+$CargoTargetPath = Join-Path $RepositoryRoot "target\run-app-web\cargo"
 New-Item -ItemType Directory -Force -Path $PkgPath | Out-Null
+New-Item -ItemType Directory -Force -Path $CargoTargetPath | Out-Null
 
 $env:CARGO_TARGET_DIR = $CargoTargetPath
 cargo build -p nannou-creative-coding-web --target wasm32-unknown-unknown --release
@@ -79,17 +113,18 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $FaviconPath = Join-Path $SitePath "favicon.svg"
-@"
+$FaviconSvg = @"
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="12" fill="#1b1b18"/>
   <circle cx="32" cy="32" r="18" fill="none" stroke="#f5f5f2" stroke-width="6"/>
   <circle cx="32" cy="32" r="5" fill="#f2b84b"/>
 </svg>
-"@ | Set-Content -LiteralPath $FaviconPath
-Copy-Item -Path $FaviconPath -Destination (Join-Path $SitePath "favicon.ico") -Force
+"@
+Set-TextFileIfChanged -Path $FaviconPath -Content $FaviconSvg
+Copy-FileIfChanged -Source $FaviconPath -Destination (Join-Path $SitePath "favicon.ico")
 
 $IndexPath = Join-Path $SitePath "index.html"
-@"
+$IndexHtml = @"
 <!doctype html>
 <html lang="en">
 <head>
@@ -259,9 +294,10 @@ $IndexPath = Join-Path $SitePath "index.html"
   </script>
 </body>
 </html>
-"@ | Set-Content -LiteralPath $IndexPath
+"@
+Set-TextFileIfChanged -Path $IndexPath -Content $IndexHtml
 
-Copy-Item -Path $IndexPath -Destination (Join-Path $SitePath "404.html") -Force
+Copy-FileIfChanged -Source $IndexPath -Destination (Join-Path $SitePath "404.html")
 
 Write-Host "Built web app: $SitePath"
 
