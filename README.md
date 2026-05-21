@@ -1,126 +1,127 @@
 # nannou-creative-coding
 
-A small Rust and nannou starter project for creative-coding sketches.
+Rust workspace for nannou creative-coding sketches, hot-reloadable desktop demos, a static WebAssembly export, and a small read-only MCP helper for agent workflows.
 
-## Install Rust
+<BR>
 
-New Windows users can install the Rust toolchain with the project script:
+## Live Web App
 
-```powershell
-.\scripts\main\Install.ps1
-```
+https://samuelasherrivello.github.io/nannou-creative-coding/
 
-The script uses official `rustup`, installs common Rust components, and verifies `rustc`, `cargo`, and `rustup`.
+The GitHub Pages root redirects to the latest exported static web build. Versioned exports are published under `/releases/<tag>/`.
 
-## Run the Sketch
+<BR>
 
-Launch the current sketch once:
+## Pics
 
-```powershell
-.\scripts\other\RunDesktop.ps1
-```
+### Screenshot
 
-The app opens a `1024x640` nannou window centered on the primary monitor. Press `F` to toggle fullscreen. The app remembers fullscreen state, monitor, position, and size in `target/window-state.json`.
+<a href="./documentation/images/Screenshot01.png">
+  <img src="./documentation/images/Screenshot01.png" width="500">
+</a>
 
-## Run With Hot Reload
+### Infographic
 
-Start the development runner:
+<a href="./documentation/images/Infographic01.png">
+  <img src="./documentation/images/Infographic01.png" width="500">
+</a>
 
-```powershell
-.\scripts\main\RunDesktopWithHotReload.ps1
-```
+<BR>
 
-For repeated use after Rust is already installed:
+## Scripts
 
-```powershell
-.\scripts\main\RunDesktopWithHotReload.ps1 -SkipInstall
-```
+### Common
 
-This script follows the `rksm/nannou-hot-reload` shape: keep the runner thin and put editable sketch code in a dynamic library. It uses `runcc` to run two `cargo-watch` commands together: one keeps the app running, and the other rebuilds the `hot_reload` library. The running app uses `hot-lib-reloader` to load updated `#[no_mangle]` functions without restarting the window.
+| Command | Required? | Description |
+| ------- | --------- | ----------- |
+| `.\scripts\main\Install.ps1` | ✅ | Installs or updates Rust through rustup, adds the WebAssembly target, and installs hot-reload and web-export tools when needed. |
+| `.\scripts\main\RunDesktopWithHotReload.ps1` | ✅ | Starts the nannou desktop runner and rebuilds the hot-reloadable sketch library as files change. Use `-SkipInstall` after dependencies are ready. |
 
-`.\scripts\main\Install.ps1` installs the required hot-reload tools:
+### Other
 
-- `cargo-watch` watches files and rebuilds on changes.
-- `runcc` runs the app watcher and library watcher concurrently.
+| Command | Required? | Description |
+| ------- | --------- | ----------- |
+| `.\scripts\other\RunDesktop.ps1` | ❌ | Launches the current desktop sketch once with `cargo run -p nannou-creative-coding`. |
+| `.\scripts\other\RunWeb.ps1` | ❌ | Builds the WebAssembly app, writes the static site to `target/run-app-web/site`, and serves it on an available localhost port unless `-BuildOnly` is used. |
+| `.\scripts\other\RunMcpServer.ps1` | ❌ | Starts the read-only MCP stdio server for project helper tools. |
+| `.\scripts\other\ExportGithubPages.ps1` | ❌ | Exports `/latest/` and `/releases/<tag>/` into `target/github-pages/public` for GitHub Pages deployment. |
+| `.\scripts\other\IncreaseReleaseVersion.ps1` | ❌ | Increments `VERSION.txt` and Rust crate versions; optional `-Commit` and `-Tag` create the release commit and tag. |
 
-## Files To Edit
+Run commands from the repository root. The desktop window uses `F` to toggle fullscreen and persists fullscreen state, monitor, position, and size to `target/window-state.json`.
 
-Edit demo folders under [rust/crates/hot_reload](rust/crates/hot_reload) for sketch code that should hot reload during development. The starter demos are:
+<BR>
 
-- `rust/crates/hot_reload/demo_01/`
-- `rust/crates/hot_reload/demo_02/`
+## Architecture
 
-Use the Left and Right arrow keys to switch demos. Switching reloads the selected demo from scratch and the overlay shows the current demo name with demo-specific instructions.
+| Path | Description |
+| ---- | ----------- |
+| [`rust/crates/main`](./rust/crates/main) | Thin desktop runner, window setup, fullscreen shortcut, persisted window state, and hot-reload callback wiring. |
+| [`rust/crates/hot_reload`](./rust/crates/hot_reload) | Hot-reloadable sketch router, shared overlay UI, FPS display, demo list, and demo folders. |
+| [`rust/crates/web`](./rust/crates/web) | WebAssembly entrypoint used by the static web export. |
+| [`rust/crates/mcp_server`](./rust/crates/mcp_server) | Read-only MCP stdio server with project description, hot-reload target, command list, and screenshot helper metadata. |
+| [`rust/patch`](./rust/patch) | Local `nannou_wgpu` patch used by this workspace. |
+| [`scripts/main`](./scripts/main) | Setup and primary development workflow scripts. |
+| [`scripts/other`](./scripts/other) | Secondary desktop, web, MCP, version, and export scripts. |
 
-Each demo module owns:
+Editable sketch code lives in snake_case demo folders under [`rust/crates/hot_reload`](./rust/crates/hot_reload). Use Left and Right arrow keys to switch compiled demos; switching recreates the selected demo state from scratch.
 
-- `view` controls the drawing.
-- `window_event` controls input.
-- `State` controls demo-specific state.
+<BR>
 
-Only edit [rust/crates/hot_reload/lib.rs](rust/crates/hot_reload/lib.rs) when changing the demo router, HUD, FPS display, or demo list. Only edit [rust/crates/main/main.rs](rust/crates/main/main.rs) when changing how the binary starts the app, creates the window, handles fullscreen, or wires hot-reload callbacks. It should stay small.
+## Nannou Features
 
-The hot-reload script watches:
+| Feature | Description |
+| ------- | ----------- |
+| Hot-reloadable demos | `runcc`, `cargo-watch`, and `hot-lib-reloader` keep the runner alive while the sketch library rebuilds. |
+| Demo router | The shared hot-reload crate owns the active demo list, per-demo state recreation, and overlay text. |
+| Persistent window state | The desktop runner remembers fullscreen, monitor, position, and size in `target/window-state.json`. |
+| Static web export | `RunWeb.ps1` builds `nannou-creative-coding-web` for `wasm32-unknown-unknown` and packages the generated site. |
+| Read-only MCP helper | The MCP server exposes project metadata without executing commands or mutating files. |
 
-- `rust/crates/hot_reload/lib.rs`
-- `rust/crates/hot_reload/Cargo.toml`
-- `rust/crates/hot_reload/demo_01/`
-- `rust/crates/hot_reload/demo_02/`
-- `rust/crates/main/main.rs`
-- `Cargo.toml`
-- `Cargo.lock`
+<BR>
 
-## Run The MCP Server
+## Github Features
 
-Start the read-only project helper MCP server over stdio:
+Keep [`.github/workflows/export-github-pages.yml`](./.github/workflows/export-github-pages.yml) as the GitHub Pages deployment workflow. It builds the static site, uploads `target/github-pages/public`, and deploys through GitHub Pages.
 
-```powershell
-.\scripts\other\RunMcpServer.ps1
-```
+Choose one release path:
 
-The server is built with the official Rust MCP SDK (`rmcp`) and exposes project helpers for agents:
+| Option | Instructions |
+| ------ | ------------ |
+| Manual release | Run `.\scripts\other\IncreaseReleaseVersion.ps1 -Part patch -Commit -Tag`, push the commit and tag, then publish a GitHub Release for the tag. |
+| GitHub Actions release | Run the `PerformRelease` workflow, choose `patch`, `minor`, or `major`, and enter release notes. |
+| Local export check | Run `.\scripts\other\ExportGithubPages.ps1 -Version v0.1.1` and inspect `target/github-pages/public`. |
 
-- `describe_project`
-- `hot_reload_target`
-- `run_commands`
-- `read_project_resource`
+The GitHub Actions display names are `PerformRelease` and `ExportGithubPages`.
 
-It does not execute project commands or modify files.
+<BR>
 
-## GitHub Pages Release Export
+## Agent Features
 
-Latest GitHub Pages export: [https://samuelasherrivello.github.io/nannou-creative-coding/latest/](https://samuelasherrivello.github.io/nannou-creative-coding/latest/)
+| File | Purpose |
+| ---- | ------- |
+| [`AGENTS.md`](./AGENTS.md) | Repository-specific Codex and agent workflow rules. |
+| [`README.md`](./README.md) | Public project workflow, architecture, scripts, live app, and release notes. |
+| [`scripts/other/RunMcpServer.ps1`](./scripts/other/RunMcpServer.ps1) | Launches the read-only MCP helper for local project context. |
 
-Versioned exports are published under:
+Agent work should keep script implementations in `scripts/main/` and `scripts/other/`, avoid build output, and make sketch edits in the active snake_case demo folder under `rust/crates/hot_reload/`.
 
-```text
-https://samuelasherrivello.github.io/nannou-creative-coding/releases/v0.1.0/
-```
+<BR>
 
-Increase the project version locally:
+## Credits
 
-```powershell
-.\scripts\other\IncreaseReleaseVersion.ps1 -Part patch
-```
+**Created By**
 
-Use `-Part minor` or `-Part major` when needed. The script updates `VERSION.txt` and Rust crate versions, then runs `cargo check`.
+- Samuel Asher Rivello
+- Over 25 years XP with game development (2026)
+- Over 10 years XP with Unity (2026)
 
-Create a release commit and tag:
+**Contact**
 
-```powershell
-.\scripts\other\IncreaseReleaseVersion.ps1 -Part patch -Commit -Tag
-git push
-git push origin v0.1.1
-```
+- Twitter - [@srivello](https://twitter.com/srivello)
+- Git - [Github.com/SamuelAsherRivello](https://github.com/SamuelAsherRivello)
+- Resume & Portfolio - [SamuelAsherRivello.com](https://www.SamuelAsherRivello.com)
+- LinkedIn - [Linkedin.com/in/SamuelAsherRivello](https://www.linkedin.com/in/SamuelAsherRivello)
 
-Publish a GitHub Release for that tag. The `ExportGithubPages` workflow exports a static GitHub Pages site for `/latest/` and `/releases/<tag>/`.
+**License**
 
-You can also publish through GitHub Actions: run the `PerformRelease` workflow manually, choose `patch`, `minor`, or `major`, and enter release notes. It updates `VERSION.txt`, updates crate versions, commits, tags, and creates the GitHub Release. Publishing that release triggers `ExportGithubPages`.
-
-You can test the export locally without publishing:
-
-```powershell
-.\scripts\other\ExportGithubPages.ps1 -Version v0.1.0
-```
-
-The local export is written to `target/github-pages/public`.
+License file not yet present in this repository.
