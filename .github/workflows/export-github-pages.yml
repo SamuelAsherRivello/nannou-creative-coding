@@ -46,7 +46,7 @@ jobs:
 
       - name: Export static Pages site
         shell: pwsh
-        run: ./scripts/ExportGithubPages.ps1 -Version '${{ steps.version.outputs.version }}' -RepositoryOwner '${{ github.repository_owner }}' -RepositoryName '${{ github.event.repository.name }}'
+        run: ./scripts/other/ExportGithubPages.ps1 -Version '${{ steps.version.outputs.version }}' -RepositoryOwner '${{ github.repository_owner }}' -RepositoryName '${{ github.event.repository.name }}'
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

@@ -1,11 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-    "rust/crates/hot-reload",
+    "rust/crates/hot_reload",
     "rust/crates/main",
-    "rust/crates/mcp-server",
+    "rust/crates/mcp_server",
+    "rust/crates/web",
 ]
 default-members = ["rust/crates/main"]
+
+[patch.crates-io]
+nannou_wgpu = { path = "rust/patch/nannou_wgpu-0.19.0" }
 
 [profile.dev]
 opt-level = 1

@@ -1,0 +1,13 @@
+[package]
+name = "hot_reload"
+version = "0.1.0"
+edition = "2021"
+
+# Build as both a normal Rust library and a reloadable dynamic library.
+[lib]
+path = "lib.rs"
+crate-type = ["rlib", "dylib"]
+
+[dependencies]
+nannou = "0.19"
+instant = "0.1"

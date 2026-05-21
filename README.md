@@ -7,7 +7,7 @@ A small Rust and nannou starter project for creative-coding sketches.
 New Windows users can install the Rust toolchain with the project script:
 
 ```powershell
-.\scripts\Install.ps1
+.\scripts\main\Install.ps1
 ```
 
 The script uses official `rustup`, installs common Rust components, and verifies `rustc`, `cargo`, and `rustup`.
@@ -17,46 +17,55 @@ The script uses official `rustup`, installs common Rust components, and verifies
 Launch the current sketch once:
 
 ```powershell
-.\scripts\Run.ps1
+.\scripts\other\RunDesktop.ps1
 ```
 
-The app opens an `800x600` nannou window centered on the primary monitor. Press `F` to toggle fullscreen. The app remembers fullscreen state, monitor, position, and size in `target/window-state.json`.
+The app opens a `1024x640` nannou window centered on the primary monitor. Press `F` to toggle fullscreen. The app remembers fullscreen state, monitor, position, and size in `target/window-state.json`.
 
 ## Run With Hot Reload
 
 Start the development runner:
 
 ```powershell
-.\scripts\RunWithHotReload.ps1
+.\scripts\main\RunDesktopWithHotReload.ps1
 ```
 
 For repeated use after Rust is already installed:
 
 ```powershell
-.\scripts\RunWithHotReload.ps1 -SkipInstall
+.\scripts\main\RunDesktopWithHotReload.ps1 -SkipInstall
 ```
 
 This script follows the `rksm/nannou-hot-reload` shape: keep the runner thin and put editable sketch code in a dynamic library. It uses `runcc` to run two `cargo-watch` commands together: one keeps the app running, and the other rebuilds the `hot_reload` library. The running app uses `hot-lib-reloader` to load updated `#[no_mangle]` functions without restarting the window.
 
-`.\scripts\Install.ps1` installs the required hot-reload tools:
+`.\scripts\main\Install.ps1` installs the required hot-reload tools:
 
 - `cargo-watch` watches files and rebuilds on changes.
 - `runcc` runs the app watcher and library watcher concurrently.
 
 ## Files To Edit
 
-Edit [rust/crates/hot-reload/lib.rs](rust/crates/hot-reload/lib.rs) for the sketch code that should hot reload during development:
+Edit demo folders under [rust/crates/hot_reload](rust/crates/hot_reload) for sketch code that should hot reload during development. The starter demos are:
+
+- `rust/crates/hot_reload/demo_01/`
+- `rust/crates/hot_reload/demo_02/`
+
+Use the Left and Right arrow keys to switch demos. Switching reloads the selected demo from scratch and the overlay shows the current demo name with demo-specific instructions.
+
+Each demo module owns:
 
 - `view` controls the drawing.
-- `update` controls per-frame behavior.
-- `Model` controls sketch state.
+- `window_event` controls input.
+- `State` controls demo-specific state.
 
-Only edit [rust/crates/main/main.rs](rust/crates/main/main.rs) when changing how the binary starts the app, creates the window, handles fullscreen, or wires hot-reload callbacks. It should stay small.
+Only edit [rust/crates/hot_reload/lib.rs](rust/crates/hot_reload/lib.rs) when changing the demo router, HUD, FPS display, or demo list. Only edit [rust/crates/main/main.rs](rust/crates/main/main.rs) when changing how the binary starts the app, creates the window, handles fullscreen, or wires hot-reload callbacks. It should stay small.
 
 The hot-reload script watches:
 
-- `rust/crates/hot-reload/lib.rs`
-- `rust/crates/hot-reload/Cargo.toml`
+- `rust/crates/hot_reload/lib.rs`
+- `rust/crates/hot_reload/Cargo.toml`
+- `rust/crates/hot_reload/demo_01/`
+- `rust/crates/hot_reload/demo_02/`
 - `rust/crates/main/main.rs`
 - `Cargo.toml`
 - `Cargo.lock`
@@ -66,7 +75,7 @@ The hot-reload script watches:
 Start the read-only project helper MCP server over stdio:
 
 ```powershell
-.\scripts\RunMcpServer.ps1
+.\scripts\other\RunMcpServer.ps1
 ```
 
 The server is built with the official Rust MCP SDK (`rmcp`) and exposes project helpers for agents:
@@ -80,11 +89,7 @@ It does not execute project commands or modify files.
 
 ## GitHub Pages Release Export
 
-Live export URL:
-
-```text
-https://samuelasherrivello.github.io/nannou-creative-coding/latest/
-```
+Latest GitHub Pages export: [https://samuelasherrivello.github.io/nannou-creative-coding/latest/](https://samuelasherrivello.github.io/nannou-creative-coding/latest/)
 
 Versioned exports are published under:
 
@@ -95,7 +100,7 @@ https://samuelasherrivello.github.io/nannou-creative-coding/releases/v0.1.0/
 Increase the project version locally:
 
 ```powershell
-.\scripts\IncreaseReleaseVersion.ps1 -Part patch
+.\scripts\other\IncreaseReleaseVersion.ps1 -Part patch
 ```
 
 Use `-Part minor` or `-Part major` when needed. The script updates `VERSION.txt` and Rust crate versions, then runs `cargo check`.
@@ -103,17 +108,19 @@ Use `-Part minor` or `-Part major` when needed. The script updates `VERSION.txt`
 Create a release commit and tag:
 
 ```powershell
-.\scripts\IncreaseReleaseVersion.ps1 -Part patch -Commit -Tag
+.\scripts\other\IncreaseReleaseVersion.ps1 -Part patch -Commit -Tag
 git push
 git push origin v0.1.1
 ```
 
 Publish a GitHub Release for that tag. The `ExportGithubPages` workflow exports a static GitHub Pages site for `/latest/` and `/releases/<tag>/`.
 
+You can also publish through GitHub Actions: run the `PerformRelease` workflow manually, choose `patch`, `minor`, or `major`, and enter release notes. It updates `VERSION.txt`, updates crate versions, commits, tags, and creates the GitHub Release. Publishing that release triggers `ExportGithubPages`.
+
 You can test the export locally without publishing:
 
 ```powershell
-.\scripts\ExportGithubPages.ps1 -Version v0.1.0
+.\scripts\other\ExportGithubPages.ps1 -Version v0.1.0
 ```
 
 The local export is written to `target/github-pages/public`.

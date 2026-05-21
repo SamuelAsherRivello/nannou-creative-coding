@@ -333,6 +333,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf43edc576402991846b093a7ca18a3477e0ef9c588cde84964b5d3e43016642"
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if 1.0.4",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -781,8 +791,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
 dependencies = [
  "cfg-if 1.0.4",
+ "js-sys",
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -967,6 +979,7 @@ dependencies = [
 name = "hot_reload"
 version = "0.1.0"
 dependencies = [
+ "instant",
  "nannou",
 ]
 
@@ -1443,6 +1456,7 @@ dependencies = [
  "tokio",
  "toml",
  "walkdir",
+ "web-sys",
  "wgpu",
  "winit",
 ]
@@ -1471,6 +1485,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nannou-creative-coding-web"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "hot_reload",
+ "nannou",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "nannou_core"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1495,8 +1519,6 @@ dependencies = [
 [[package]]
 name = "nannou_wgpu"
 version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a844299c103075b965e869149a564d6e79b00a9cdb158c8b58dcaa79707543e"
 dependencies = [
  "futures",
  "image",
