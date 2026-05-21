@@ -4,6 +4,7 @@ use nannou::prelude::*;
 // Each demo module owns one hot-reloadable sketch and its local state.
 mod demo_01;
 mod demo_02;
+mod demo_03;
 
 // The desktop and web runners share this fixed design size and aspect ratio.
 pub const WINDOW_WIDTH: u32 = 1024;
@@ -20,7 +21,7 @@ const STATUS_VERTICAL_PADDING: f32 = 14.0;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DemoHud {
-    pub demo_hud_text: &'static str,
+    pub demo_hud_text: String,
 }
 
 // The viewport maps the resizable window onto the fixed-aspect drawing area.
@@ -133,6 +134,9 @@ impl demo_state {
             1 => Self {
                 inner: Box::new(demo_02::State::new()),
             },
+            2 => Self {
+                inner: Box::new(demo_03::State::new()),
+            },
             _ => Self {
                 inner: Box::new(demo_01::State::new()),
             },
@@ -188,6 +192,20 @@ impl demo_runtime for demo_02::State {
     }
 }
 
+impl demo_runtime for demo_03::State {
+    fn render_hud(&self) -> DemoHud {
+        demo_03::render_hud(self)
+    }
+
+    fn window_event(&mut self, app: &App, event: &WindowEvent) {
+        demo_03::window_event(app, self, event);
+    }
+
+    fn view(&self, app: &App, draw: &Draw, viewport: AspectViewport) {
+        demo_03::view(app, self, draw, viewport);
+    }
+}
+
 #[no_mangle]
 pub fn window_event(app: &App, model: &mut Model, event: &WindowEvent) {
     match event {
@@ -215,7 +233,7 @@ fn select_next_demo(model: &mut Model) {
 }
 
 fn demo_count() -> usize {
-    2
+    3
 }
 
 #[no_mangle]
@@ -320,8 +338,8 @@ fn draw_status_box(draw: &Draw, center: Point2, height: f32, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::{
-        demo_01, demo_02, format_fps, reload_current_demo, select_next_demo, select_previous_demo,
-        AspectViewport, Model, HUD_WIDTH,
+        demo_01, demo_02, demo_03, format_fps, reload_current_demo, select_next_demo,
+        select_previous_demo, AspectViewport, Model, HUD_WIDTH,
     };
     use nannou::prelude::Rect;
 
@@ -383,25 +401,37 @@ mod tests {
         let mut model = Model::new();
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_01\nInput: None"
+            "Demo_01: Template\nInput: None"
         );
 
         select_next_demo(&mut model);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
 
         select_next_demo(&mut model);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_01\nInput: None"
+            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+        );
+
+        select_next_demo(&mut model);
+        assert_eq!(
+            model.demo_state.render_hud().demo_hud_text,
+            "Demo_01: Template\nInput: None"
         );
 
         select_previous_demo(&mut model);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+        );
+
+        select_previous_demo(&mut model);
+        assert_eq!(
+            model.demo_state.render_hud().demo_hud_text,
+            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -414,7 +444,7 @@ mod tests {
 
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -425,7 +455,7 @@ mod tests {
         assert_eq!(model.current_demo_index(), 1);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -433,10 +463,10 @@ mod tests {
     fn saved_demo_index_wraps_to_available_demo() {
         let model = Model::new_with_demo_index(3);
 
-        assert_eq!(model.current_demo_index(), 1);
+        assert_eq!(model.current_demo_index(), 0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_01: Template\nInput: None"
         );
     }
 
@@ -445,7 +475,7 @@ mod tests {
         let state = demo_01::State::new();
         let hud = demo_01::render_hud(&state);
 
-        assert_eq!(hud.demo_hud_text, "Demo_01\nInput: None");
+        assert_eq!(hud.demo_hud_text, "Demo_01: Template\nInput: None");
     }
 
     #[test]
@@ -455,7 +485,18 @@ mod tests {
 
         assert_eq!(
             hud.demo_hud_text,
-            "Demo_02\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+        );
+    }
+
+    #[test]
+    fn demo_03_declares_its_hud() {
+        let state = demo_03::State::new();
+        let hud = demo_03::render_hud(&state);
+
+        assert_eq!(
+            hud.demo_hud_text,
+            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
         );
     }
 }
