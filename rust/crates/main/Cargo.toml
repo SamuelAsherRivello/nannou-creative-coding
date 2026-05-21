@@ -1,6 +1,6 @@
 [package]
 name = "nannou-creative-coding"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 # Desktop runner binary for the hot-reloadable nannou sketches.
