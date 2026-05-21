@@ -277,7 +277,6 @@ fn format_fps(value: f32) -> String {
 
 #[no_mangle]
 pub fn view(app: &App, model: &Model, frame: Frame) {
-    eprintln!("[runweb] view callback");
     let draw = app.draw();
     let viewport = AspectViewport::current(app);
 
@@ -358,6 +357,14 @@ mod tests {
     #[test]
     fn hud_width_is_reduced_to_eighty_percent() {
         assert_eq!(HUD_WIDTH, 264.0);
+    }
+
+    #[test]
+    fn view_does_not_log_every_frame() {
+        let source = include_str!("lib.rs");
+        let noisy_frame_log = concat!("[runweb] ", "view callback");
+
+        assert!(!source.contains(noisy_frame_log));
     }
 
     #[test]

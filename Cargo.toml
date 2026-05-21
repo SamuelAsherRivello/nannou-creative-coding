@@ -10,6 +10,7 @@ default-members = ["rust/crates/main"]
 
 [patch.crates-io]
 nannou_wgpu = { path = "rust/patch/nannou_wgpu-0.19.0" }
+noise = { path = "rust/patch/noise-0.7.0" }
 
 [profile.dev]
 opt-level = 1

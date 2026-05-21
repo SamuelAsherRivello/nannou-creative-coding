@@ -55,4 +55,14 @@ mod tests {
         assert!(width * WEBGPU_SAFE_DEVICE_PIXEL_RATIO <= WEBGPU_COMMON_MAX_TEXTURE_SIZE);
         assert!(height * WEBGPU_SAFE_DEVICE_PIXEL_RATIO <= WEBGPU_COMMON_MAX_TEXTURE_SIZE);
     }
+
+    #[test]
+    fn runweb_fullscreen_shortcut_claims_plain_f_before_canvas_handlers() {
+        let runweb_script = include_str!("../../../scripts/other/RunWeb.ps1");
+
+        assert!(runweb_script.contains("event.stopImmediatePropagation();"));
+        assert!(runweb_script.contains(
+            "window.addEventListener(\"keydown\", handleFullscreenShortcut, { capture: true });"
+        ));
+    }
 }

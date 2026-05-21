@@ -62,6 +62,22 @@ function Set-TextFileIfChanged {
     Set-Content -LiteralPath $Path -Value $Content -NoNewline
 }
 
+function Get-FileSha256 {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $Stream = [System.IO.File]::OpenRead((Resolve-Path -LiteralPath $Path))
+    try {
+        $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return [System.BitConverter]::ToString($Sha256.ComputeHash($Stream)).Replace("-", "")
+        } finally {
+            $Sha256.Dispose()
+        }
+    } finally {
+        $Stream.Dispose()
+    }
+}
+
 function Copy-FileIfChanged {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -69,9 +85,9 @@ function Copy-FileIfChanged {
     )
 
     if (Test-Path -LiteralPath $Destination -PathType Leaf) {
-        $SourceHash = Get-FileHash -LiteralPath $Source
-        $DestinationHash = Get-FileHash -LiteralPath $Destination
-        if ($SourceHash.Hash -eq $DestinationHash.Hash) {
+        $SourceHash = Get-FileSha256 -Path $Source
+        $DestinationHash = Get-FileSha256 -Path $Destination
+        if ($SourceHash -eq $DestinationHash) {
             return
         }
     }
@@ -217,14 +233,17 @@ $IndexHtml = @"
       window.addEventListener("load", focusCanvas);
       window.addEventListener("resize", focusCanvas);
       window.addEventListener("pointerdown", focusCanvas);
-      window.addEventListener("keydown", (event) => {
+      const handleFullscreenShortcut = (event) => {
         if (event.key.toLowerCase() !== "f") return;
+        if (event.altKey || event.ctrlKey || event.metaKey) return;
 
         event.preventDefault();
+        event.stopImmediatePropagation();
         toggleFullscreen().catch((error) => {
           console.error("Fullscreen toggle failed", error);
         });
-      });
+      };
+      window.addEventListener("keydown", handleFullscreenShortcut, { capture: true });
 
       if (!navigator.gpu) {
         setStatus("error", "WebGPU unavailable");

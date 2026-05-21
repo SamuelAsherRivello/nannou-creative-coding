@@ -295,7 +295,7 @@ impl Snapshot {
 }
 
 impl<'b> Rgba8AsyncMappedImageBuffer<'b> {
-    pub fn as_image(&self) -> image::SubImage<wgpu::ImageHolder<image::Rgba<u8>>> {
+    pub fn as_image(&self) -> image::SubImage<wgpu::ImageHolder<'_, image::Rgba<u8>>> {
         // safe: we know it's Rgba<u8>
         unsafe { self.0.as_image::<image::Rgba<u8>>() }
     }
