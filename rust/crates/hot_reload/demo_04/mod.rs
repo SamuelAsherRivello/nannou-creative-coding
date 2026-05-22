@@ -26,7 +26,7 @@ pub struct State
 impl State {
     pub fn new() -> Self {
         Self {
-            rotation_delta: random_range(0.01, 0.9),
+            rotation_delta: random_range(0.02, 0.2), 
         }
     }
 }

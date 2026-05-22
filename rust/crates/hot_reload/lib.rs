@@ -13,6 +13,7 @@ const STATUS_GAP: f32 = 8.0;
 const STATUS_TEXT_SIZE: u32 = 15;
 const STATUS_LINE_HEIGHT: f32 = 20.0;
 const STATUS_VERTICAL_PADDING: f32 = 14.0;
+const HUD_VISIBILITY_FADE_SECONDS: f32 = 0.25;
 const HUD_DEMO_SWITCH_REVEAL_SECONDS: f32 = 2.0;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -88,6 +89,8 @@ pub struct Model {
     demo_index: usize,
     demo_state: demo_state,
     hud_visible: bool,
+    hud_visibility_changed_at: Option<f32>,
+    temporary_hud_visible_from: Option<f32>,
     temporary_hud_visible_until: Option<f32>,
     pub was_updated: bool,
 }
@@ -113,6 +116,8 @@ impl Model {
             demo_index,
             demo_state: demo_state::new(demo_index),
             hud_visible,
+            hud_visibility_changed_at: None,
+            temporary_hud_visible_from: None,
             temporary_hud_visible_until: None,
             was_updated: false,
         }
@@ -128,14 +133,59 @@ impl Model {
 
     pub fn set_hud_visible(&mut self, hud_visible: bool) {
         self.hud_visible = hud_visible;
+        self.hud_visibility_changed_at = None;
+        self.temporary_hud_visible_from = None;
+        self.temporary_hud_visible_until = None;
+    }
+
+    pub fn set_hud_visible_at(&mut self, hud_visible: bool, app_time: f32) {
+        if self.hud_visible == hud_visible {
+            return;
+        }
+
+        self.hud_visible = hud_visible;
+        self.hud_visibility_changed_at = Some(app_time);
+        self.temporary_hud_visible_from = None;
         self.temporary_hud_visible_until = None;
     }
 
     pub fn status_overlay_visible(&self, app_time: f32) -> bool {
-        self.hud_visible
-            || self
-                .temporary_hud_visible_until
-                .is_some_and(|visible_until| app_time < visible_until)
+        self.status_overlay_alpha(app_time) > 0.0
+    }
+
+    pub fn status_overlay_alpha(&self, app_time: f32) -> f32 {
+        self.persistent_hud_alpha(app_time)
+            .max(self.temporary_hud_alpha(app_time))
+    }
+
+    fn persistent_hud_alpha(&self, app_time: f32) -> f32 {
+        let Some(changed_at) = self.hud_visibility_changed_at else {
+            return if self.hud_visible { 1.0 } else { 0.0 };
+        };
+
+        let progress = fade_progress(changed_at, app_time);
+        if self.hud_visible {
+            progress
+        } else {
+            1.0 - progress
+        }
+    }
+
+    fn temporary_hud_alpha(&self, app_time: f32) -> f32 {
+        let Some(visible_from) = self.temporary_hud_visible_from else {
+            return 0.0;
+        };
+        let Some(visible_until) = self.temporary_hud_visible_until else {
+            return 0.0;
+        };
+        if app_time < visible_from || app_time >= visible_until {
+            return 0.0;
+        }
+
+        let fade_in_alpha = fade_progress(visible_from, app_time);
+        let fade_out_alpha =
+            ((visible_until - app_time) / HUD_VISIBILITY_FADE_SECONDS).clamp(0.0, 1.0);
+        fade_in_alpha.min(fade_out_alpha)
     }
 }
 
@@ -181,7 +231,7 @@ include!(concat!(env!("OUT_DIR"), "/demo_registry.rs"));
 pub fn window_event(app: &App, model: &mut Model, event: &WindowEvent) {
     match event {
         WindowEvent::KeyPressed(Key::F) => toggle_fullscreen(app),
-        WindowEvent::KeyPressed(Key::H) => toggle_status_overlay(model),
+        WindowEvent::KeyPressed(Key::H) => toggle_status_overlay(model, app.time),
         WindowEvent::KeyPressed(Key::R) => reload_current_demo(model),
         // Demo switches recreate state so each sketch starts cleanly.
         WindowEvent::KeyPressed(Key::Left) => select_previous_demo(model, app.time),
@@ -195,8 +245,8 @@ fn toggle_fullscreen(app: &App) {
     window.set_fullscreen(window.fullscreen().is_none());
 }
 
-fn toggle_status_overlay(model: &mut Model) {
-    model.set_hud_visible(!model.hud_visible);
+fn toggle_status_overlay(model: &mut Model, app_time: f32) {
+    model.set_hud_visible_at(!model.hud_visible, app_time);
 }
 
 fn select_previous_demo(model: &mut Model, app_time: f32) {
@@ -213,6 +263,7 @@ fn select_next_demo(model: &mut Model, app_time: f32) {
 
 fn reveal_hud_for_demo_switch(model: &mut Model, app_time: f32) {
     if !model.hud_visible {
+        model.temporary_hud_visible_from = Some(app_time);
         model.temporary_hud_visible_until = Some(app_time + HUD_DEMO_SWITCH_REVEAL_SECONDS);
     }
 }
@@ -239,8 +290,20 @@ fn clear_expired_temporary_hud(model: &mut Model, app_time: f32) {
         .temporary_hud_visible_until
         .is_some_and(|visible_until| app_time >= visible_until)
     {
+        model.temporary_hud_visible_from = None;
         model.temporary_hud_visible_until = None;
     }
+
+    if model
+        .hud_visibility_changed_at
+        .is_some_and(|changed_at| app_time >= changed_at + HUD_VISIBILITY_FADE_SECONDS)
+    {
+        model.hud_visibility_changed_at = None;
+    }
+}
+
+fn fade_progress(start_time: f32, app_time: f32) -> f32 {
+    ((app_time - start_time) / HUD_VISIBILITY_FADE_SECONDS).clamp(0.0, 1.0)
 }
 
 fn normalize_demo_index(index: usize) -> usize {
@@ -275,8 +338,9 @@ pub fn view(app: &App, model: &Model, frame: Frame) {
     draw.background().color(BLACK);
     model.demo_state.view(app, &draw, viewport);
 
-    if model.status_overlay_visible(app.time) {
-        draw_status_overlay(model, &draw, viewport);
+    let status_overlay_alpha = model.status_overlay_alpha(app.time);
+    if status_overlay_alpha > 0.0 {
+        draw_status_overlay(model, &draw, viewport, status_overlay_alpha);
     }
 
     if let Err(error) = draw.to_frame(app, &frame) {
@@ -284,7 +348,7 @@ pub fn view(app: &App, model: &Model, frame: Frame) {
     }
 }
 
-fn draw_status_overlay(model: &Model, draw: &Draw, viewport: AspectViewport) {
+fn draw_status_overlay(model: &Model, draw: &Draw, viewport: AspectViewport, alpha: f32) {
     let content = viewport.content_rect;
     let app_text = format!(
         "FPS: {}\nKeys: ←, →, F, H, R, Esc",
@@ -304,8 +368,8 @@ fn draw_status_overlay(model: &Model, draw: &Draw, viewport: AspectViewport) {
         app_center.y - app_height * 0.5 - STATUS_GAP - demo_height * 0.5,
     );
 
-    draw_status_box(draw, app_center, app_height, &app_text);
-    draw_status_box(draw, demo_center, demo_height, &demo_text);
+    draw_status_box(draw, app_center, app_height, &app_text, alpha);
+    draw_status_box(draw, demo_center, demo_height, &demo_text, alpha);
 }
 
 fn status_height_for_text(text: &str) -> f32 {
@@ -313,11 +377,11 @@ fn status_height_for_text(text: &str) -> f32 {
     line_count * STATUS_LINE_HEIGHT + STATUS_VERTICAL_PADDING
 }
 
-fn draw_status_box(draw: &Draw, center: Point2, height: f32, text: &str) {
+fn draw_status_box(draw: &Draw, center: Point2, height: f32, text: &str, alpha: f32) {
     draw.rect()
         .xy(center)
         .w_h(HUD_WIDTH, height)
-        .color(rgba(0.0, 0.0, 0.0, 0.86));
+        .color(rgba(0.0, 0.0, 0.0, 0.86 * alpha));
 
     draw.text(&text)
         .xy(center)
@@ -325,7 +389,7 @@ fn draw_status_box(draw: &Draw, center: Point2, height: f32, text: &str) {
         .left_justify()
         .align_text_top()
         .font_size(STATUS_TEXT_SIZE)
-        .color(WHITE);
+        .color(rgba(1.0, 1.0, 1.0, alpha));
 }
 
 #[cfg(test)]
@@ -333,7 +397,8 @@ mod tests {
     use super::{
         clear_expired_temporary_hud, demo_01, demo_02, demo_03, demo_04, format_fps,
         reload_current_demo, reveal_hud_for_demo_switch, select_next_demo, select_previous_demo,
-        AspectViewport, Model, HUD_DEMO_SWITCH_REVEAL_SECONDS, HUD_WIDTH,
+        AspectViewport, Model, HUD_DEMO_SWITCH_REVEAL_SECONDS, HUD_VISIBILITY_FADE_SECONDS,
+        HUD_WIDTH,
     };
     use nannou::prelude::Rect;
 
@@ -498,6 +563,7 @@ mod tests {
 
         assert!(!model.hud_visible());
         assert!(!model.status_overlay_visible(0.0));
+        assert_eq!(model.status_overlay_alpha(0.0), 0.0);
     }
 
     #[test]
@@ -506,9 +572,48 @@ mod tests {
 
         reveal_hud_for_demo_switch(&mut model, 1.0);
 
-        assert!(model.status_overlay_visible(1.0));
+        assert_eq!(model.status_overlay_alpha(1.0), 0.0);
+        assert!(model.status_overlay_visible(1.0 + HUD_VISIBILITY_FADE_SECONDS * 0.5));
+        assert_eq!(
+            model.status_overlay_alpha(1.0 + HUD_VISIBILITY_FADE_SECONDS * 0.5),
+            0.5
+        );
         assert!(model.status_overlay_visible(1.0 + HUD_DEMO_SWITCH_REVEAL_SECONDS - 0.1));
         assert!(!model.status_overlay_visible(1.0 + HUD_DEMO_SWITCH_REVEAL_SECONDS));
+    }
+
+    #[test]
+    fn hud_fades_in_when_enabled() {
+        let mut model = Model::new_with_settings(0, false);
+
+        model.set_hud_visible_at(true, 1.0);
+
+        assert_eq!(model.status_overlay_alpha(1.0), 0.0);
+        assert_eq!(
+            model.status_overlay_alpha(1.0 + HUD_VISIBILITY_FADE_SECONDS * 0.5),
+            0.5
+        );
+        assert_eq!(
+            model.status_overlay_alpha(1.0 + HUD_VISIBILITY_FADE_SECONDS),
+            1.0
+        );
+    }
+
+    #[test]
+    fn hud_fades_out_when_disabled() {
+        let mut model = Model::new_with_settings(0, true);
+
+        model.set_hud_visible_at(false, 1.0);
+
+        assert_eq!(model.status_overlay_alpha(1.0), 1.0);
+        assert_eq!(
+            model.status_overlay_alpha(1.0 + HUD_VISIBILITY_FADE_SECONDS * 0.5),
+            0.5
+        );
+        assert_eq!(
+            model.status_overlay_alpha(1.0 + HUD_VISIBILITY_FADE_SECONDS),
+            0.0
+        );
     }
 
     #[test]

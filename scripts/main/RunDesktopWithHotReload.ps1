@@ -11,14 +11,26 @@ function Write-Status {
     Write-Host "$Message..."
 }
 
+function Format-ElapsedSeconds {
+    param([Parameter(Mandatory = $true)][System.Diagnostics.Stopwatch]$Stopwatch)
+
+    [string]::Format(
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        "{0:0.0}s",
+        $Stopwatch.Elapsed.TotalSeconds
+    )
+}
+
 function Invoke-QuietCommand {
     param(
         [Parameter(Mandatory = $true)][string]$Status,
+        [string]$CompleteStatus,
         [Parameter(Mandatory = $true)][string]$FilePath,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
 
     Write-Status $Status
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
     $stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-$([System.Guid]::NewGuid()).out.log"
     $stderrLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-$([System.Guid]::NewGuid()).err.log"
@@ -35,9 +47,16 @@ function Invoke-QuietCommand {
             -RedirectStandardError $stderrLog
 
         if ($process.ExitCode -ne 0) {
+            $stopwatch.Stop()
             Get-Content -Path $stdoutLog -ErrorAction SilentlyContinue
             Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
-            throw "$Status failed with exit code $($process.ExitCode)."
+            throw "$Status failed with exit code $($process.ExitCode) after $(Format-ElapsedSeconds $stopwatch)."
+        }
+
+        $stopwatch.Stop()
+
+        if (-not [string]::IsNullOrWhiteSpace($CompleteStatus)) {
+            Write-Host "$CompleteStatus ($(Format-ElapsedSeconds $stopwatch))"
         }
     } finally {
         Remove-Item -LiteralPath $stdoutLog -Force -ErrorAction SilentlyContinue
@@ -53,14 +72,19 @@ function Invoke-HotReloadBuild {
     )
 
     Write-Status $Status
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
     $output = & $FilePath @Arguments 2>&1
     $exitCode = $LASTEXITCODE
+    $stopwatch.Stop()
+    $elapsed = Format-ElapsedSeconds $stopwatch
 
     if ($exitCode -eq 0) {
+        Write-Host "$Status Complete ($elapsed)"
         return $true
     }
 
+    Write-Host "$Status Failed ($elapsed)"
     Write-Warning "$Status failed with exit code $exitCode. Keeping the running app alive with the previous good build."
     $output | ForEach-Object { Write-Host $_ }
     return $false
@@ -82,7 +106,7 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $projectRoot
 
 if (-not $SkipInstall) {
-    Invoke-QuietCommand "Installing" "powershell" @(
+    Invoke-QuietCommand "Setup" "" "powershell" @(
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
@@ -91,8 +115,9 @@ if (-not $SkipInstall) {
     )
 }
 
-Invoke-QuietCommand "Building" "cargo" @("build", "--quiet", "-p", "nannou-creative-coding")
-Invoke-QuietCommand "HotReloading" "cargo" @("build", "--quiet", "-p", "hot_reload")
+Invoke-QuietCommand "Building" "Building Complete" "cargo" @("build", "--quiet", "-p", "nannou-creative-coding")
+Write-Host ""
+Invoke-QuietCommand "HotReloading" "HotReloading Complete" "cargo" @("build", "--quiet", "-p", "hot_reload")
 
 $stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).out.log"
 $stderrLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).err.log"
@@ -144,7 +169,7 @@ try {
                     [System.IO.WatcherChangeTypes]::Created -bor
                     [System.IO.WatcherChangeTypes]::Deleted -bor
                     [System.IO.WatcherChangeTypes]::Renamed,
-                    1000
+                    100
                 )
             } until ($change.TimedOut)
 
@@ -156,7 +181,7 @@ try {
                     [System.IO.WatcherChangeTypes]::Created -bor
                     [System.IO.WatcherChangeTypes]::Deleted -bor
                     [System.IO.WatcherChangeTypes]::Renamed,
-                    250
+                    100
                 )
             } until ($change.TimedOut)
         }
