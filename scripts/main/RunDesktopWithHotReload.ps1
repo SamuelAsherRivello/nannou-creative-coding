@@ -5,43 +5,179 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Write-Step {
+function Write-Status {
     param([Parameter(Mandatory = $true)][string]$Message)
 
-    Write-Host ""
-    Write-Host "==> $Message"
+    Write-Host "$Message..."
 }
 
-function Test-Command {
-    param([Parameter(Mandatory = $true)][string]$Name)
+function Invoke-QuietCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$Status,
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
 
-    return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+    Write-Status $Status
+
+    $stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-$([System.Guid]::NewGuid()).out.log"
+    $stderrLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-$([System.Guid]::NewGuid()).err.log"
+
+    try {
+        $process = Start-Process `
+            -FilePath $FilePath `
+            -ArgumentList $Arguments `
+            -WorkingDirectory (Get-Location) `
+            -NoNewWindow `
+            -PassThru `
+            -Wait `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog
+
+        if ($process.ExitCode -ne 0) {
+            Get-Content -Path $stdoutLog -ErrorAction SilentlyContinue
+            Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
+            throw "$Status failed with exit code $($process.ExitCode)."
+        }
+    } finally {
+        Remove-Item -LiteralPath $stdoutLog -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderrLog -Force -ErrorAction SilentlyContinue
+    }
 }
 
-$projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+function Invoke-HotReloadBuild {
+    param(
+        [Parameter(Mandatory = $true)][string]$Status,
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    Write-Status $Status
+
+    $output = & $FilePath @Arguments 2>&1
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -eq 0) {
+        return $true
+    }
+
+    Write-Warning "$Status failed with exit code $exitCode. Keeping the running app alive with the previous good build."
+    $output | ForEach-Object { Write-Host $_ }
+    return $false
+}
+
+function Stop-ProcessTree {
+    param([Parameter(Mandatory = $true)][int]$ProcessId)
+
+    $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+
+    foreach ($child in $children) {
+        Stop-ProcessTree -ProcessId $child.ProcessId
+    }
+
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $projectRoot
 
 if (-not $SkipInstall) {
-    Write-Step "Checking Rust setup"
-    & (Join-Path $PSScriptRoot "Install.ps1")
+    Invoke-QuietCommand "Installing" "powershell" @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        (Join-Path $PSScriptRoot "Install.ps1")
+    )
 }
 
-if (-not (Test-Command "cargo-watch")) {
-    Write-Step "Installing cargo-watch"
-    cargo install cargo-watch --locked
+Invoke-QuietCommand "Building" "cargo" @("build", "--quiet", "-p", "nannou-creative-coding")
+Invoke-QuietCommand "HotReloading" "cargo" @("build", "--quiet", "-p", "hot_reload")
+
+$stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).out.log"
+$stderrLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).err.log"
+$runnerProcess = $null
+$watcher = $null
+
+try {
+    $runnerProcess = Start-Process `
+        -FilePath "cargo" `
+        -ArgumentList @("run", "--quiet", "-p", "nannou-creative-coding") `
+        -WorkingDirectory $projectRoot `
+        -NoNewWindow `
+        -PassThru `
+        -RedirectStandardOutput $stdoutLog `
+        -RedirectStandardError $stderrLog
+
+    Start-Sleep -Milliseconds 500
+
+    if ($runnerProcess.HasExited) {
+        $runnerProcess.Refresh()
+        Get-Content -Path $stdoutLog -ErrorAction SilentlyContinue
+        Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
+
+        if ($null -ne $runnerProcess.ExitCode -and $runnerProcess.ExitCode -ne 0) {
+            throw "Desktop runner exited with code $($runnerProcess.ExitCode)."
+        }
+
+        return
+    }
+
+    $watcher = New-Object System.IO.FileSystemWatcher
+    $watcher.Path = Join-Path $projectRoot "rust\crates\hot_reload"
+    $watcher.IncludeSubdirectories = $true
+    $watcher.EnableRaisingEvents = $true
+
+    while (-not $runnerProcess.HasExited) {
+        $change = $watcher.WaitForChanged(
+            [System.IO.WatcherChangeTypes]::Changed -bor
+            [System.IO.WatcherChangeTypes]::Created -bor
+            [System.IO.WatcherChangeTypes]::Deleted -bor
+            [System.IO.WatcherChangeTypes]::Renamed,
+            500
+        )
+
+        if (-not $change.TimedOut) {
+            do {
+                $change = $watcher.WaitForChanged(
+                    [System.IO.WatcherChangeTypes]::Changed -bor
+                    [System.IO.WatcherChangeTypes]::Created -bor
+                    [System.IO.WatcherChangeTypes]::Deleted -bor
+                    [System.IO.WatcherChangeTypes]::Renamed,
+                    1000
+                )
+            } until ($change.TimedOut)
+
+            Invoke-HotReloadBuild "HotReloading" "cargo" @("build", "--quiet", "-p", "hot_reload") | Out-Null
+
+            do {
+                $change = $watcher.WaitForChanged(
+                    [System.IO.WatcherChangeTypes]::Changed -bor
+                    [System.IO.WatcherChangeTypes]::Created -bor
+                    [System.IO.WatcherChangeTypes]::Deleted -bor
+                    [System.IO.WatcherChangeTypes]::Renamed,
+                    250
+                )
+            } until ($change.TimedOut)
+        }
+    }
+
+    $runnerProcess.Refresh()
+    Get-Content -Path $stdoutLog -ErrorAction SilentlyContinue
+    Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
+
+    if ($null -ne $runnerProcess.ExitCode -and $runnerProcess.ExitCode -ne 0) {
+        throw "Desktop runner exited with code $($runnerProcess.ExitCode)."
+    }
+} finally {
+    if ($watcher) {
+        $watcher.Dispose()
+    }
+
+    if ($runnerProcess -and -not $runnerProcess.HasExited) {
+        Stop-ProcessTree -ProcessId $runnerProcess.Id
+    }
+
+    Remove-Item -LiteralPath $stdoutLog -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stderrLog -Force -ErrorAction SilentlyContinue
 }
-
-if (-not (Test-Command "cargo-runcc")) {
-    Write-Step "Installing runcc"
-    cargo install runcc --locked
-}
-
-Write-Step "Starting hot reload runner"
-Write-Host "Running the app and rebuilding the hot_reload dylib when rust/crates/hot_reload changes."
-Write-Host "Using workspace target directory: $(Join-Path $projectRoot 'target')"
-Write-Host "runcc will stop both commands when you press Ctrl+C."
-Write-Host ""
-
-cargo runcc `
-    "cargo watch --ignore rust/crates/hot_reload --exec `"run -p nannou-creative-coding`"" `
-    "cargo watch --watch rust/crates/hot_reload --exec `"build -p hot_reload`""

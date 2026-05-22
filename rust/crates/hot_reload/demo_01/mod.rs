@@ -26,7 +26,7 @@ pub fn window_event(_app: &App, _state: &mut State, _event: &WindowEvent) {}
 // Returns the small text block shown in the demo-specific status overlay.
 pub fn render_hud(_state: &State) -> DemoHud {
     DemoHud {
-        demo_hud_text: "Demo_01: Template\nInput: None".to_string(),
+        demo_hud_text: "Template\nInput: None".to_string(),
     }
 }
 

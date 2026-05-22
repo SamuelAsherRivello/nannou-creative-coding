@@ -47,6 +47,10 @@ fn model(app: &App) -> Model {
         .as_ref()
         .map(|saved_window| saved_window.demo_index)
         .unwrap_or_default();
+    let saved_hud_visible = saved_window
+        .as_ref()
+        .map(|saved_window| saved_window.hud_visible)
+        .unwrap_or(true);
     let window_id = app
         .new_window()
         .size(hot_reload::WINDOW_WIDTH, hot_reload::WINDOW_HEIGHT)
@@ -61,7 +65,7 @@ fn model(app: &App) -> Model {
     restore_window(app, window_id, saved_window.as_ref());
     show_window(app, window_id);
 
-    Model::new_with_demo_index(saved_demo_index)
+    Model::new_with_settings(saved_demo_index, saved_hud_visible)
 }
 
 fn update(app: &App, model: &mut Model, update: Update) {
@@ -92,6 +96,7 @@ fn window_event(app: &App, model: &mut Model, event: WindowEvent) {
 
     match event {
         KeyPressed(Key::F)
+        | KeyPressed(Key::H)
         | KeyPressed(Key::Left)
         | KeyPressed(Key::Right)
         | KeyPressed(Key::Escape)
@@ -103,7 +108,7 @@ fn window_event(app: &App, model: &mut Model, event: WindowEvent) {
 
 fn persist_focused_window(app: &App, model: &Model) {
     let window = app.main_window();
-    StoredWindow::from_window(&window, model.current_demo_index()).save();
+    StoredWindow::from_window(&window, model.current_demo_index(), model.hud_visible()).save();
 }
 
 fn restore_window(app: &App, window_id: WindowId, saved_window: Option<&StoredWindow>) {
@@ -178,7 +183,7 @@ fn find_monitor(
     })
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct StoredWindow {
     fullscreen: bool,
     position: Option<StoredPosition>,
@@ -186,11 +191,26 @@ struct StoredWindow {
     monitor: Option<StoredMonitor>,
     #[serde(default)]
     demo_index: usize,
+    #[serde(default = "default_hud_visible")]
+    hud_visible: bool,
+}
+
+impl Default for StoredWindow {
+    fn default() -> Self {
+        Self {
+            fullscreen: false,
+            position: None,
+            size: None,
+            monitor: None,
+            demo_index: 0,
+            hud_visible: default_hud_visible(),
+        }
+    }
 }
 
 impl StoredWindow {
     // Capture enough window metadata to restore the user's workspace next run.
-    fn from_window(window: &nannou::window::Window, demo_index: usize) -> Self {
+    fn from_window(window: &nannou::window::Window, demo_index: usize, hud_visible: bool) -> Self {
         let position = window
             .outer_position_pixels()
             .ok()
@@ -203,6 +223,7 @@ impl StoredWindow {
             size: Some(StoredSize { width, height }),
             monitor: window.current_monitor().map(StoredMonitor::from_monitor),
             demo_index,
+            hud_visible,
         }
     }
 
@@ -231,6 +252,10 @@ impl StoredWindow {
             Err(error) => eprintln!("failed to serialize window state: {error}"),
         }
     }
+}
+
+fn default_hud_visible() -> bool {
+    true
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -327,10 +352,32 @@ mod tests {
     }
 
     #[test]
+    fn window_state_serializes_hud_visibility() {
+        let state = StoredWindow {
+            hud_visible: false,
+            ..Default::default()
+        };
+
+        let serialized = serde_json::to_string(&state).expect("state should serialize");
+        let restored: StoredWindow =
+            serde_json::from_str(&serialized).expect("state should deserialize");
+
+        assert!(!restored.hud_visible);
+    }
+
+    #[test]
     fn window_state_defaults_missing_demo_index_to_first_demo() {
         let restored: StoredWindow =
             serde_json::from_str(r#"{"fullscreen":false}"#).expect("old state should deserialize");
 
         assert_eq!(restored.demo_index, 0);
+    }
+
+    #[test]
+    fn window_state_defaults_missing_hud_visibility_to_visible() {
+        let restored: StoredWindow =
+            serde_json::from_str(r#"{"fullscreen":false}"#).expect("old state should deserialize");
+
+        assert!(restored.hud_visible);
     }
 }

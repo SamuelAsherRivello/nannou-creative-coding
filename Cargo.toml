@@ -4,7 +4,6 @@ members = [
     "rust/crates/hot_reload",
     "rust/crates/main",
     "rust/crates/mcp_server",
-    "rust/crates/web",
 ]
 default-members = ["rust/crates/main"]
 

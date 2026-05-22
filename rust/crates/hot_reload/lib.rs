@@ -1,11 +1,6 @@
 use instant::Instant;
 use nannou::prelude::*;
 
-// Each demo module owns one hot-reloadable sketch and its local state.
-mod demo_01;
-mod demo_02;
-mod demo_03;
-
 // The desktop and web runners share this fixed design size and aspect ratio.
 pub const WINDOW_WIDTH: u32 = 1024;
 pub const WINDOW_HEIGHT: u32 = 640;
@@ -18,6 +13,7 @@ const STATUS_GAP: f32 = 8.0;
 const STATUS_TEXT_SIZE: u32 = 15;
 const STATUS_LINE_HEIGHT: f32 = 20.0;
 const STATUS_VERTICAL_PADDING: f32 = 14.0;
+const HUD_DEMO_SWITCH_REVEAL_SECONDS: f32 = 2.0;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DemoHud {
@@ -91,6 +87,8 @@ pub struct Model {
     last_fps_display_update: f32,
     demo_index: usize,
     demo_state: demo_state,
+    hud_visible: bool,
+    temporary_hud_visible_until: Option<f32>,
     pub was_updated: bool,
 }
 
@@ -100,6 +98,10 @@ impl Model {
     }
 
     pub fn new_with_demo_index(demo_index: usize) -> Self {
+        Self::new_with_settings(demo_index, true)
+    }
+
+    pub fn new_with_settings(demo_index: usize, hud_visible: bool) -> Self {
         let demo_index = normalize_demo_index(demo_index);
 
         Self {
@@ -110,12 +112,30 @@ impl Model {
             last_fps_display_update: 0.0,
             demo_index,
             demo_state: demo_state::new(demo_index),
+            hud_visible,
+            temporary_hud_visible_until: None,
             was_updated: false,
         }
     }
 
     pub fn current_demo_index(&self) -> usize {
         self.demo_index
+    }
+
+    pub fn hud_visible(&self) -> bool {
+        self.hud_visible
+    }
+
+    pub fn set_hud_visible(&mut self, hud_visible: bool) {
+        self.hud_visible = hud_visible;
+        self.temporary_hud_visible_until = None;
+    }
+
+    pub fn status_overlay_visible(&self, app_time: f32) -> bool {
+        self.hud_visible
+            || self
+                .temporary_hud_visible_until
+                .is_some_and(|visible_until| app_time < visible_until)
     }
 }
 
@@ -127,20 +147,11 @@ struct demo_state {
 
 impl demo_state {
     fn new(index: usize) -> Self {
-        match index {
-            0 => Self {
-                inner: Box::new(demo_01::State::new()),
-            },
-            1 => Self {
-                inner: Box::new(demo_02::State::new()),
-            },
-            2 => Self {
-                inner: Box::new(demo_03::State::new()),
-            },
-            _ => Self {
-                inner: Box::new(demo_01::State::new()),
-            },
-        }
+        create_demo_state(index)
+    }
+
+    fn from_inner(inner: Box<dyn demo_runtime>) -> Self {
+        Self { inner }
     }
 
     fn render_hud(&self) -> DemoHud {
@@ -164,55 +175,17 @@ trait demo_runtime {
     fn view(&self, app: &App, draw: &Draw, viewport: AspectViewport);
 }
 
-impl demo_runtime for demo_01::State {
-    fn render_hud(&self) -> DemoHud {
-        demo_01::render_hud(self)
-    }
-
-    fn window_event(&mut self, app: &App, event: &WindowEvent) {
-        demo_01::window_event(app, self, event);
-    }
-
-    fn view(&self, app: &App, draw: &Draw, viewport: AspectViewport) {
-        demo_01::view(app, self, draw, viewport);
-    }
-}
-
-impl demo_runtime for demo_02::State {
-    fn render_hud(&self) -> DemoHud {
-        demo_02::render_hud(self)
-    }
-
-    fn window_event(&mut self, app: &App, event: &WindowEvent) {
-        demo_02::window_event(app, self, event);
-    }
-
-    fn view(&self, app: &App, draw: &Draw, viewport: AspectViewport) {
-        demo_02::view(app, self, draw, viewport);
-    }
-}
-
-impl demo_runtime for demo_03::State {
-    fn render_hud(&self) -> DemoHud {
-        demo_03::render_hud(self)
-    }
-
-    fn window_event(&mut self, app: &App, event: &WindowEvent) {
-        demo_03::window_event(app, self, event);
-    }
-
-    fn view(&self, app: &App, draw: &Draw, viewport: AspectViewport) {
-        demo_03::view(app, self, draw, viewport);
-    }
-}
+include!(concat!(env!("OUT_DIR"), "/demo_registry.rs"));
 
 #[no_mangle]
 pub fn window_event(app: &App, model: &mut Model, event: &WindowEvent) {
     match event {
         WindowEvent::KeyPressed(Key::F) => toggle_fullscreen(app),
+        WindowEvent::KeyPressed(Key::H) => toggle_status_overlay(model),
+        WindowEvent::KeyPressed(Key::R) => reload_current_demo(model),
         // Demo switches recreate state so each sketch starts cleanly.
-        WindowEvent::KeyPressed(Key::Left) => select_previous_demo(model),
-        WindowEvent::KeyPressed(Key::Right) => select_next_demo(model),
+        WindowEvent::KeyPressed(Key::Left) => select_previous_demo(model, app.time),
+        WindowEvent::KeyPressed(Key::Right) => select_next_demo(model, app.time),
         _ => model.demo_state.window_event(app, event),
     }
 }
@@ -222,18 +195,26 @@ fn toggle_fullscreen(app: &App) {
     window.set_fullscreen(window.fullscreen().is_none());
 }
 
-fn select_previous_demo(model: &mut Model) {
+fn toggle_status_overlay(model: &mut Model) {
+    model.set_hud_visible(!model.hud_visible);
+}
+
+fn select_previous_demo(model: &mut Model, app_time: f32) {
     model.demo_index = (model.demo_index + demo_count() - 1) % demo_count();
     model.demo_state = demo_state::new(model.demo_index);
+    reveal_hud_for_demo_switch(model, app_time);
 }
 
-fn select_next_demo(model: &mut Model) {
+fn select_next_demo(model: &mut Model, app_time: f32) {
     model.demo_index = (model.demo_index + 1) % demo_count();
     model.demo_state = demo_state::new(model.demo_index);
+    reveal_hud_for_demo_switch(model, app_time);
 }
 
-fn demo_count() -> usize {
-    3
+fn reveal_hud_for_demo_switch(model: &mut Model, app_time: f32) {
+    if !model.hud_visible {
+        model.temporary_hud_visible_until = Some(app_time + HUD_DEMO_SWITCH_REVEAL_SECONDS);
+    }
 }
 
 #[no_mangle]
@@ -244,12 +225,22 @@ pub fn update(app: &App, model: &mut Model, _update: Update) {
     }
 
     update_displayed_fps(app, model);
+    clear_expired_temporary_hud(model, app.time);
     model.was_updated = false;
 }
 
 fn reload_current_demo(model: &mut Model) {
     model.demo_index = normalize_demo_index(model.demo_index);
     model.demo_state = demo_state::new(model.demo_index);
+}
+
+fn clear_expired_temporary_hud(model: &mut Model, app_time: f32) {
+    if model
+        .temporary_hud_visible_until
+        .is_some_and(|visible_until| app_time >= visible_until)
+    {
+        model.temporary_hud_visible_until = None;
+    }
 }
 
 fn normalize_demo_index(index: usize) -> usize {
@@ -283,7 +274,10 @@ pub fn view(app: &App, model: &Model, frame: Frame) {
     // The shared black background shows through any letterbox or pillarbox area.
     draw.background().color(BLACK);
     model.demo_state.view(app, &draw, viewport);
-    draw_status_overlay(model, &draw, viewport);
+
+    if model.status_overlay_visible(app.time) {
+        draw_status_overlay(model, &draw, viewport);
+    }
 
     if let Err(error) = draw.to_frame(app, &frame) {
         eprintln!("[runweb] failed to draw frame: {:?}", error);
@@ -293,7 +287,7 @@ pub fn view(app: &App, model: &Model, frame: Frame) {
 fn draw_status_overlay(model: &Model, draw: &Draw, viewport: AspectViewport) {
     let content = viewport.content_rect;
     let app_text = format!(
-        "FPS {}\nKeys: ←, →, F, Esc",
+        "FPS: {}\nKeys: ←, →, F, H, R, Esc",
         format_fps(model.displayed_fps)
     );
     let demo_hud = model.demo_state.render_hud();
@@ -337,8 +331,9 @@ fn draw_status_box(draw: &Draw, center: Point2, height: f32, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::{
-        demo_01, demo_02, demo_03, format_fps, reload_current_demo, select_next_demo,
-        select_previous_demo, AspectViewport, Model, HUD_WIDTH,
+        clear_expired_temporary_hud, demo_01, demo_02, demo_03, demo_04, format_fps,
+        reload_current_demo, reveal_hud_for_demo_switch, select_next_demo, select_previous_demo,
+        AspectViewport, Model, HUD_DEMO_SWITCH_REVEAL_SECONDS, HUD_WIDTH,
     };
     use nannou::prelude::Rect;
 
@@ -408,50 +403,62 @@ mod tests {
         let mut model = Model::new();
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_01: Template\nInput: None"
+            "demo_01: Template\nInput: None"
         );
 
-        select_next_demo(&mut model);
+        select_next_demo(&mut model, 0.0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
 
-        select_next_demo(&mut model);
+        select_next_demo(&mut model, 0.0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+            "demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
         );
 
-        select_next_demo(&mut model);
+        select_next_demo(&mut model, 0.0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_01: Template\nInput: None"
+            "demo_04: Squares\nInput: None"
         );
 
-        select_previous_demo(&mut model);
+        select_next_demo(&mut model, 0.0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+            "demo_01: Template\nInput: None"
         );
 
-        select_previous_demo(&mut model);
+        select_previous_demo(&mut model, 0.0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "demo_04: Squares\nInput: None"
+        );
+
+        select_previous_demo(&mut model, 0.0);
+        assert_eq!(
+            model.demo_state.render_hud().demo_hud_text,
+            "demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+        );
+
+        select_previous_demo(&mut model, 0.0);
+        assert_eq!(
+            model.demo_state.render_hud().demo_hud_text,
+            "demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
     #[test]
     fn reload_keeps_current_demo() {
         let mut model = Model::new();
-        select_next_demo(&mut model);
+        select_next_demo(&mut model, 0.0);
 
         reload_current_demo(&mut model);
 
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -462,7 +469,7 @@ mod tests {
         assert_eq!(model.current_demo_index(), 1);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -470,11 +477,58 @@ mod tests {
     fn saved_demo_index_wraps_to_available_demo() {
         let model = Model::new_with_demo_index(3);
 
+        assert_eq!(model.current_demo_index(), 3);
+        assert_eq!(
+            model.demo_state.render_hud().demo_hud_text,
+            "demo_04: Squares\nInput: None"
+        );
+
+        let model = Model::new_with_demo_index(4);
+
         assert_eq!(model.current_demo_index(), 0);
         assert_eq!(
             model.demo_state.render_hud().demo_hud_text,
-            "Demo_01: Template\nInput: None"
+            "demo_01: Template\nInput: None"
         );
+    }
+
+    #[test]
+    fn model_can_start_with_hidden_hud() {
+        let model = Model::new_with_settings(0, false);
+
+        assert!(!model.hud_visible());
+        assert!(!model.status_overlay_visible(0.0));
+    }
+
+    #[test]
+    fn hidden_hud_reveals_temporarily_after_demo_switch() {
+        let mut model = Model::new_with_settings(0, false);
+
+        reveal_hud_for_demo_switch(&mut model, 1.0);
+
+        assert!(model.status_overlay_visible(1.0));
+        assert!(model.status_overlay_visible(1.0 + HUD_DEMO_SWITCH_REVEAL_SECONDS - 0.1));
+        assert!(!model.status_overlay_visible(1.0 + HUD_DEMO_SWITCH_REVEAL_SECONDS));
+    }
+
+    #[test]
+    fn visible_hud_stays_visible_after_demo_switch() {
+        let mut model = Model::new_with_settings(0, true);
+
+        reveal_hud_for_demo_switch(&mut model, 1.0);
+
+        assert!(model.hud_visible());
+        assert!(model.status_overlay_visible(1.0 + HUD_DEMO_SWITCH_REVEAL_SECONDS));
+    }
+
+    #[test]
+    fn expired_temporary_hud_state_is_cleared() {
+        let mut model = Model::new_with_settings(0, false);
+        model.temporary_hud_visible_until = Some(0.9);
+
+        clear_expired_temporary_hud(&mut model, 1.0);
+
+        assert_eq!(model.temporary_hud_visible_until, None);
     }
 
     #[test]
@@ -482,7 +536,7 @@ mod tests {
         let state = demo_01::State::new();
         let hud = demo_01::render_hud(&state);
 
-        assert_eq!(hud.demo_hud_text, "Demo_01: Template\nInput: None");
+        assert_eq!(hud.demo_hud_text, "Template\nInput: None");
     }
 
     #[test]
@@ -492,7 +546,7 @@ mod tests {
 
         assert_eq!(
             hud.demo_hud_text,
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            "Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
         );
     }
 
@@ -503,7 +557,15 @@ mod tests {
 
         assert_eq!(
             hud.demo_hud_text,
-            "Demo_03: Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
+            "Climate\nInput: A = Arrows (On)\nInput: T = Trails (Low)\nInput: C = Colors (Medium)\nInput: S = Speed (Low)"
         );
+    }
+
+    #[test]
+    fn demo_04_declares_its_hud() {
+        let state = demo_04::State::new();
+        let hud = demo_04::render_hud(&state);
+
+        assert_eq!(hud.demo_hud_text, "Squares\nInput: None");
     }
 }

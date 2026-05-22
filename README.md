@@ -55,15 +55,22 @@ Run commands from the repository root. The desktop window uses `F` to toggle ful
 
 | Path | Description |
 | ---- | ----------- |
-| [`rust/crates/main`](./rust/crates/main) | Thin desktop runner, window setup, fullscreen shortcut, persisted window state, and hot-reload callback wiring. |
+| [`rust/crates/main`](./rust/crates/main) | Desktop runner, WebAssembly entrypoint, window setup, fullscreen shortcut, persisted window state, and hot-reload callback wiring. |
 | [`rust/crates/hot_reload`](./rust/crates/hot_reload) | Hot-reloadable sketch router, shared overlay UI, FPS display, demo list, and demo folders. |
-| [`rust/crates/web`](./rust/crates/web) | WebAssembly entrypoint used by the static web export. |
 | [`rust/crates/mcp_server`](./rust/crates/mcp_server) | Read-only MCP stdio server with project description, hot-reload target, command list, and screenshot helper metadata. |
 | [`rust/patch`](./rust/patch) | Local `nannou_wgpu` patch used by this workspace. |
 | [`scripts/main`](./scripts/main) | Setup and primary development workflow scripts. |
 | [`scripts/other`](./scripts/other) | Secondary desktop, web, MCP, version, and export scripts. |
 
 Editable sketch code lives in snake_case demo folders under [`rust/crates/hot_reload`](./rust/crates/hot_reload). Use Left and Right arrow keys to switch compiled demos; switching recreates the selected demo state from scratch.
+
+<BR>
+
+## How to make new demo
+
+1. Duplicate any existing demo.
+2. Press play. It is already automatically respected.
+3. Now you can edit its contents however you like.
 
 <BR>
 
@@ -74,7 +81,7 @@ Editable sketch code lives in snake_case demo folders under [`rust/crates/hot_re
 | Hot-reloadable demos | `runcc`, `cargo-watch`, and `hot-lib-reloader` keep the runner alive while the sketch library rebuilds. |
 | Demo router | The shared hot-reload crate owns the active demo list, per-demo state recreation, and overlay text. |
 | Persistent window state | The desktop runner remembers fullscreen, monitor, position, and size in `target/window-state.json`. |
-| Static web export | `RunWeb.ps1` builds `nannou-creative-coding-web` for `wasm32-unknown-unknown` and packages the generated site. |
+| Static web export | `RunWeb.ps1` builds the `nannou-creative-coding` library target for `wasm32-unknown-unknown` and packages the generated site. |
 | Read-only MCP helper | The MCP server exposes project metadata without executing commands or mutating files. |
 
 <BR>

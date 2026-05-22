@@ -111,14 +111,15 @@ $PkgPath = Join-Path $SitePath "pkg"
 $CargoTargetPath = Join-Path $RepositoryRoot "target\run-app-web\cargo"
 New-Item -ItemType Directory -Force -Path $PkgPath | Out-Null
 New-Item -ItemType Directory -Force -Path $CargoTargetPath | Out-Null
+Get-ChildItem -LiteralPath $PkgPath -File | Remove-Item -Force
 
 $env:CARGO_TARGET_DIR = $CargoTargetPath
-cargo build -p nannou-creative-coding-web --target wasm32-unknown-unknown --release
+cargo build -p nannou-creative-coding --lib --target wasm32-unknown-unknown --release
 if ($LASTEXITCODE -ne 0) {
     throw "cargo build failed with exit code $LASTEXITCODE."
 }
 
-$WasmPath = Join-Path $CargoTargetPath "wasm32-unknown-unknown\release\nannou_creative_coding_web.wasm"
+$WasmPath = Join-Path $CargoTargetPath "wasm32-unknown-unknown\release\nannou_creative_coding.wasm"
 if (-not (Test-Path -LiteralPath $WasmPath -PathType Leaf)) {
     throw "Expected WASM output was not found: $WasmPath"
 }
@@ -181,7 +182,7 @@ $IndexHtml = @"
 <body>
   <div id="runweb-status" data-state="starting">Starting WebGPU...</div>
   <script type="module">
-    import init from "./pkg/nannou_creative_coding_web.js";
+    import init from "./pkg/nannou_creative_coding.js";
 
     const startApp = async () => {
       const status = document.getElementById("runweb-status");

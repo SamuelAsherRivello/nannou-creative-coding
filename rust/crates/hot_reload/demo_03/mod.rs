@@ -53,7 +53,7 @@ pub fn window_event(_app: &App, state: &mut State, event: &WindowEvent) {
 pub fn render_hud(state: &State) -> DemoHud {
     DemoHud {
         demo_hud_text: format!(
-            "Demo_03: Climate\nInput: A = Arrows ({})\nInput: T = Trails ({})\nInput: C = Colors ({})\nInput: S = Speed ({})",
+            "Climate\nInput: A = Arrows ({})\nInput: T = Trails ({})\nInput: C = Colors ({})\nInput: S = Speed ({})",
             if state.show_arrows { "On" } else { "Off" },
             state.trail_density.label(),
             state.color_resolution.label(),

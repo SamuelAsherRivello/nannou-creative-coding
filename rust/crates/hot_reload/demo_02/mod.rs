@@ -86,9 +86,8 @@ pub fn window_event(app: &App, state: &mut State, event: &WindowEvent) {
 
 pub fn render_hud(_state: &State) -> DemoHud {
     DemoHud {
-        demo_hud_text:
-            "Demo_02: Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
-                .to_string(),
+        demo_hud_text: "Memories\nInput:\n• Left-mouse = Create Memory\n• Right-mouse = Clear Memory"
+            .to_string(),
     }
 }
 

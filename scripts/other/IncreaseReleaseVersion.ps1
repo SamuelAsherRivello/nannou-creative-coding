@@ -45,8 +45,7 @@ Set-Content -LiteralPath $VersionFile -Value $NextVersion -NoNewline
 $CargoTomls = @(
     "rust/crates/main/Cargo.toml",
     "rust/crates/hot_reload/Cargo.toml",
-    "rust/crates/mcp_server/Cargo.toml",
-    "rust/crates/web/Cargo.toml"
+    "rust/crates/mcp_server/Cargo.toml"
 )
 
 foreach ($RelativePath in $CargoTomls) {
@@ -59,7 +58,7 @@ foreach ($RelativePath in $CargoTomls) {
 cargo check
 
 if ($Commit) {
-    git add VERSION.txt rust/crates/main/Cargo.toml rust/crates/hot_reload/Cargo.toml rust/crates/mcp_server/Cargo.toml rust/crates/web/Cargo.toml Cargo.lock
+    git add VERSION.txt rust/crates/main/Cargo.toml rust/crates/hot_reload/Cargo.toml rust/crates/mcp_server/Cargo.toml Cargo.lock
     git commit -m "Release v$NextVersion"
 }
 
