@@ -145,6 +145,10 @@ fn restore_window(app: &App, window_id: WindowId, saved_window: Option<&StoredWi
 fn show_window(app: &App, window_id: WindowId) {
     if let Some(window) = app.window(window_id) {
         window.set_visible(true);
+        window.winit_window().focus_window();
+        window.winit_window().request_user_attention(Some(
+            nannou::winit::window::UserAttentionType::Informational,
+        ));
     }
 }
 

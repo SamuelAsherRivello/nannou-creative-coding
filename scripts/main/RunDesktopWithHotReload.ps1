@@ -90,6 +90,11 @@ function Invoke-HotReloadBuild {
     return $false
 }
 
+function Write-RecompileRequiredMessage {
+    Write-Host ""
+    Write-Host "You must close and recompile the app."
+}
+
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][int]$ProcessId)
 
@@ -117,7 +122,7 @@ if (-not $SkipInstall) {
 
 Invoke-QuietCommand "Building" "Building Complete" "cargo" @("build", "--quiet", "-p", "nannou-creative-coding")
 Write-Host ""
-Invoke-QuietCommand "HotReloading" "HotReloading Complete" "cargo" @("build", "--quiet", "-p", "hot_reload")
+Invoke-QuietCommand "HotReloading" "HotReloading Complete" "cargo" @("rustc", "--quiet", "-p", "hot_reload", "--lib", "--crate-type", "dylib")
 
 $stdoutLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).out.log"
 $stderrLog = Join-Path ([System.IO.Path]::GetTempPath()) "nannou-creative-coding-runner-$([System.Guid]::NewGuid()).err.log"
@@ -142,7 +147,7 @@ try {
         Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
 
         if ($null -ne $runnerProcess.ExitCode -and $runnerProcess.ExitCode -ne 0) {
-            throw "Desktop runner exited with code $($runnerProcess.ExitCode)."
+            Write-RecompileRequiredMessage
         }
 
         return
@@ -173,7 +178,7 @@ try {
                 )
             } until ($change.TimedOut)
 
-            Invoke-HotReloadBuild "HotReloading" "cargo" @("build", "--quiet", "-p", "hot_reload") | Out-Null
+            Invoke-HotReloadBuild "HotReloading" "cargo" @("rustc", "--quiet", "-p", "hot_reload", "--lib", "--crate-type", "dylib") | Out-Null
 
             do {
                 $change = $watcher.WaitForChanged(
@@ -192,7 +197,8 @@ try {
     Get-Content -Path $stderrLog -ErrorAction SilentlyContinue
 
     if ($null -ne $runnerProcess.ExitCode -and $runnerProcess.ExitCode -ne 0) {
-        throw "Desktop runner exited with code $($runnerProcess.ExitCode)."
+        Write-RecompileRequiredMessage
+        return
     }
 } finally {
     if ($watcher) {

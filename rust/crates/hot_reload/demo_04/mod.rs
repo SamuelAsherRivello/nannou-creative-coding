@@ -18,21 +18,21 @@ const GRID_SCALE: f32 = 0.72;
 const COLOR_1: Rgb<u8> = BLACK;
 const COLOR_2: Rgb<u8> = DARKGREY;
 
-pub struct State
-{
+pub struct State {
     pub rotation_delta: f32,
+    pub filled_square_index: usize,
 }
 
 impl State {
     pub fn new() -> Self {
         Self {
-            rotation_delta: random_range(0.02, 0.2), 
+            rotation_delta: random_range(0.02, 0.2),
+            filled_square_index: random_range(0, GRID_COLUMNS * GRID_ROWS),
         }
     }
 }
 
 pub fn view(_app: &App, _state: &State, draw: &Draw, viewport: AspectViewport) {
-
     draw.background().color(COLOR_1);
 
     let content = viewport.content_rect;
@@ -43,13 +43,21 @@ pub fn view(_app: &App, _state: &State, draw: &Draw, viewport: AspectViewport) {
 
     let mut rotation: f32 = 0.0;
 
-
     for column in 0..GRID_COLUMNS {
-
         for row in 0..GRID_ROWS {
+            let square_index = row * GRID_COLUMNS + column;
 
             let x = grid_left + square_size * (column as f32 + 0.5);
             let y = grid_top - square_size * (row as f32 + 0.5);
+
+            if square_index == _state.filled_square_index {
+                draw.rect()
+                    .color(COLOR_2)
+                    .w(square_size)
+                    .h(square_size)
+                    .x_y(x, y)
+                    .rotate(rotation);
+            }
 
             draw.rect()
                 .no_fill()
@@ -60,8 +68,7 @@ pub fn view(_app: &App, _state: &State, draw: &Draw, viewport: AspectViewport) {
                 .x_y(x, y)
                 .rotate(rotation);
 
-          rotation += _state.rotation_delta;
+            rotation += _state.rotation_delta;
         }
-          
     }
 }
